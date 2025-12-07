@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Lua Deobfuscator UI</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin: 24px; background:#f7f8fb; color:#111; }
+    .container { max-width:1000px; margin: 0 auto; background:white; padding:20px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.06) }
+    textarea { width:100%; height:240px; font-family: monospace; padding:10px; border:1px solid #e2e8f0; border-radius:6px; resize:vertical }
+    input[type=file] { display:block; margin-top:8px; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap }
+    .btn { padding:10px 14px; border-radius:8px; cursor:pointer; border:0; background:#2563eb; color:white }
+    .muted { color:#6b7280 }
+    pre { background:#0b1220; color:#dbeafe; padding:12px; overflow:auto; border-radius:6px }
+    label { display:flex; gap:8px; align-items:center; }
+    .options { margin:12px 0; display:flex; gap:12px; flex-wrap:wrap }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Lua Deobfuscator</h1>
+    <p class="muted">Paste your Lua code or upload a .lua file, choose options, and click <strong>Deobfuscate</strong>. <strong>Do not upload secrets or production code you don't control.</strong></p>
+
+    <div>
+      <label>Paste Lua code</label>
+      <textarea id="code" placeholder="Paste your Lua source here..."></textarea>
+      <div style="margin:8px 0">or upload file: <input type="file" id="file" accept=".lua" /></div>
+    </div>
+
+    <div class="options">
+      <label><input type="checkbox" id="traceOnly" /> trace-only</label>
+      <label>Trace level:
+        <select id="trace">
+          <option value="prints">prints</option>
+          <option value="calls">calls</option>
+          <option value="api">api</option>
+          <option value="debug">debug</option>
+          <option value="off">off</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="noPretty" /> no-pretty</label>
+      <label>Emit AST path (optional): <input id="emit_ast" placeholder="emit_ast.lua" /></label>
+    </div>
+
+    <div class="row" style="margin-top:8px">
+      <button id="do" class="btn">Deobfuscate</button>
+      <button id="clear" class="btn" style="background:#6b7280">Clear</button>
+      <div id="status" class="muted" style="margin-left:12px"></div>
+    </div>
+
+    <h3 style="margin-top:18px">Result</h3>
+    <pre id="result" style="min-height:200px">No result yet.</pre>
+
+    <h3>Logs</h3>
+    <pre id="logs" style="min-height:120px">No logs yet.</pre>
+  </div>
+
+  <script>
+    const codeEl = document.getElementById('code');
+    const fileEl = document.getElementById('file');
+    const doBtn = document.getElementById('do');
+    const clearBtn = document.getElementById('clear');
+    const resultEl = document.getElementById('result');
+    const logsEl = document.getElementById('logs');
+    const statusEl = document.getElementById('status');
+    const traceEl = document.getElementById('trace');
+    const traceOnlyEl = document.getElementById('traceOnly');
+    const noPrettyEl = document.getElementById('noPretty');
+    const emitAstEl = document.getElementById('emit_ast');
+
+    clearBtn.onclick = () => {
+      codeEl.value = '';
+      fileEl.value = '';
+      resultEl.textContent = 'No result yet.';
+      logsEl.textContent = 'No logs yet.';
+    };
+
+    doBtn.onclick = async () => {
+      statusEl.textContent = 'Running...';
+      resultEl.textContent = '';
+      logsEl.textContent = '';
+      try {
+        const form = new FormData();
+        if (fileEl.files && fileEl.files.length > 0) {
+          form.append('file', fileEl.files[0]);
+        } else {
+          // send code as JSON via fetch with body
+          // but to reuse same endpoint we'll send code in a FormData field
+          form.append('code', codeEl.value);
+        }
+        const options = {
+          trace: traceEl.value,
+          traceOnly: traceOnlyEl.checked,
+          pretty: !noPrettyEl.checked,
+          emit_ast: emitAstEl.value || ''
+        };
+        form.append('options', JSON.stringify(options));
+
+        const r = await fetch('/api/deob', { method: 'POST', body: form });
+        if (!r.ok) {
+          const err = await r.json().catch(()=>({ error: 'unknown' }));
+          statusEl.textContent = 'Error';
+          logsEl.textContent = JSON.stringify(err, null, 2);
+          return;
+        }
+        const j = await r.json();
+        statusEl.textContent = j.success ? 'OK' : 'Failed';
+        if (j.result) resultEl.textContent = j.result;
+        logsEl.textContent = [
+          'exitCode: ' + j.exitCode,
+          'stdout:',
+          j.stdout || '',
+          '',
+          'stderr:',
+          j.stderr || ''
+        ].join('\n\n');
+      } catch (e) {
+        statusEl.textContent = 'Error';
+        logsEl.textContent = e.toString();
+      }
+    };
+  </script>
+</body>
+</html>
