@@ -1,0 +1,21 @@
+# ============================================================
+# render.yaml deployment descriptor
+# ============================================================
+
+services:
+  - type: web
+    name: prometheus-deob-v2
+    autoDeploy: true
+    env: docker
+    plan: starter
+
+    docker:
+      filePath: ./Dockerfile
+
+    ports:
+      - port: 3000
+        protocol: http
+
+    envVars:
+      - key: PORT
+        value: 3000
